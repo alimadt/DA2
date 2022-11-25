@@ -1,0 +1,102 @@
+---
+title: "DA2 Assignment 1"
+author: "Alima Dzhanybaeva, Hanna Asipovich"
+date: "2022-11-24"
+output: pdf_document
+---
+```{r include=FALSE}
+library(readr)
+library(dplyr)
+library(estimatr)
+library(ggplot2)
+library(modelsummary)
+library(knitr)
+library(xtable)
+```
+
+```{r include=FALSE}
+earnings <- read_csv('https://osf.io/4ay9x/download')
+
+# Lawyers 
+earnings <- earnings %>% filter(occ2012 == 2100)
+
+# Additional filtering
+earnings <- earnings %>% filter(uhours>=20 & earnwke>0 & age>=24 & age<=64 & grade92>=44)
+
+earnings <- earnings %>% mutate(female=as.numeric(sex==2)) %>%
+  mutate(w=earnwke/uhours) %>%
+  mutate(lnw=log(w))
+```
+
+## Introduction
+For our assignment we chose to compare the earnings of employees for the category **occ2012=2100** (Lawyers, Judges, magistrates, and other judicial workers). After applying additional filters on age, weekly hours (> 20 hours), and educational levels (grade92 >= 44) we obtained 965 observations. Out of those, 370 are female and 595 are male. Additionally, we created binary variable *female* (that is 1 if the individual is a woman and 0 if a man) and generated an hourly wage variable.
+
+## Simple Linear Regression Analysis
+For our simple regression analysis, we applied log transformation on hourly wages and used it as the dependent variable. As an explanatory variable, we used *female* variable. For **Model 1** we used simple linear regression and for **Model 2** we applied linear regression with robust standard errors. However, there is no practical difference between these two models.
+
+```{r echo=FALSE}
+# Regressions on female (with and without robust)
+regr1 <- lm(lnw ~ female, data = earnings)
+
+regr2 <- lm_robust(lnw ~ female, data = earnings, se_type = "HC1")
+
+msummary(list(regr1, regr2),
+         fmt="%.4f",
+         gof_omit = 'DF|Deviance|Log.Lik.|F|R2 Adj.|AIC|BIC',
+         stars=c('*' = .05, '**' = .01)
+) %>% kableExtra::kable_styling(latex_options = "hold_position")
+```
+
+Based on the obtained results, the explanatory variable *female* is statistically significant even at 0.01 significance level, and women employed as Lawyers, Judges, magistrates, and other judicial workers on average earn 9.2% less than males with the same occupation.
+We can be 95% confident that the average difference between the hourly earnings of female employees in the chosen category versus male ones was from -15% to -3%.
+
+## Multiple regression analysis
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+# Graph
+earnings$grade92 <- as.factor(earnings$grade92)
+earnings <- earnings %>%
+  mutate(educ = case_when(grade92 ==  '44'~ "MA",
+                          grade92 == '45' ~ "Prof. school",
+                          grade92 == '46' ~ "PhD"))
+
+graph1 <- ggplot(data = earnings, aes(x = educ, fill = educ)) + 
+  geom_histogram(stat='count')+ facet_wrap(~ifelse(female, "Female", "Male")) + 
+  labs(x='Level of education', y='Count', fill='Level of education') + geom_text(aes(label = ..count..), stat = "count", vjust = 1.5, colour = "white")
+graph1
+```
+
+We took 3 levels of education background: MA, PhD, and Professional school. **Model 1** shows the results for simple regression with robust standard errors where we had loged hourly wage as the dependent variable and *female* as the independent variable. For **Model 2**  we ran robust regression on loged hourly wages with the base category “Professional school”, as it has the most observations; the category “Phd” was used as the base category in **Model 3**. 
+
+```{r echo=FALSE}
+earnings <- earnings %>% mutate(ed_MA=as.numeric(grade92==44),
+                      ed_Profess = as.numeric(grade92==45),
+                      ed_PhD = as.numeric(grade92==46)
+)
+regr4 <- lm_robust(lnw ~ female + ed_Profess + ed_MA, data=earnings, se_type = "HC1")
+regr3 <- lm_robust(lnw ~ female + ed_MA + ed_PhD, data=earnings, se_type = "HC1")
+
+msummary(list(regr2, regr3, regr4),
+         fmt="%.4f",
+         gof_omit = 'DF|Deviance|Log.Lik.|F|R2 Adj.|AIC|BIC',
+         stars=c('*' = .05, '**' = .01)
+) %>% kableExtra::kable_styling(latex_options = "hold_position")
+```
+\newpage
+As we can see, gender has proven to always be statistically significant. However, when we introduced additional variables for education level, the coefficient for *female* variable became lower in absolute value. Therefore, we can conclude that grade92 also explains the difference in earnings.
+
+### Gender
+Both **Model 2** and **Model 3** showed that women of the chosen category, on average, earn 9% less than men working in the same occupation.
+
+### Educational level
+*ed_MA* is statistically different from zero at 0.05 significance level in **Model 2** and insignificant in **Model 3**. *ed_Phd* and *ed_Profess* are both statistically insignificant in **Model 2** and **Model 3** respectively. This may come from the prevalence of people with 'Professional school' degree in the chosen occupation. Despite this fact, we still interpret obtained coefficients for these variables.
+
+**Model 2**: On average, in comparison with workers whose highest educational level is 'Professional school' people with a Master's degree earn 13.5% less, and individuals with Phd earn 4.8% less.
+
+**Model 3**: In comparison with workers with PhD people with a Master's degree, on average, earn 8.7%% less and individuals whose highest educational level is 'Professional school' earn 4.8% more.
+
+Additionally, it can be seen from the regressions, that the models have a weak fit, so they are not performing particularly well when explaining the variation in y. This is due to the fact that we only used two variables.
+
+## Summary
+We analyzed the pattern of relationship between hourly earnings, gender, and level of education for lawyers, judges and other legal professionals. Our guess was that females employed in this category earn on average less than men. This proved to be true. Further, we ran linear regression models with a few transformations on the level of education. 
+
